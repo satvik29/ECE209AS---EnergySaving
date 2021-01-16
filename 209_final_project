@@ -1,0 +1,650 @@
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
+import numpy as np
+import operator
+import itertools
+import functools
+import random
+import sys
+import copy
+import math
+import GPy
+import pandas as pd
+import csv
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF
+
+Y = np.array([0])
+X = np.array([0])
+X_test = np.array([0])
+#solar_file = "/content/sample_data/solar_energy_LA.csv"
+#with open(solar_file, 'r') as solar_energy_data:
+#    solar_energy_reader = csv.reader(solar_energy_data, delimiter = ",")
+#    header = next(solar_energy_reader)
+#    count = 0
+#    for line in solar_energy_reader:
+#        Y = np.append(Y, float(line[5]))
+#        X = np.append(X, X[-1] + 30)
+#        count += 1
+#        if count > 3000:
+#            break
+
+elec_usage_file = "energy_usage_LA.csv"
+with open(elec_usage_file, 'r') as elec_usage_data:
+    elec_usage_reader = csv.reader(elec_usage_data, delimiter = ",")
+    header = next(elec_usage_reader)
+    count = 0
+    for line in elec_usage_reader:
+        Y = np.append(Y, float(line[1]))
+        X = np.append(X, X[-1] + 30)
+        for cnt in range(3):
+          X_test = np.append(X_test, X_test[-1]+10)
+        count += 1
+        if count > 8759:
+          break
+
+# Gaussian Process Regression
+## Kernel: RBF, RatQuad, PeriodicExponential, Brownian, sde_StdPeriodic
+
+X = np.delete(X, 0)
+Y = np.delete(Y, 0)
+X = np.reshape(X, (len(X), 1))
+Y = np.reshape(Y, (len(Y), 1))
+X_test =np.delete(X_test,0)
+X_test = np.reshape(X_test, (len(X_test),1))
+#X_test = np.reshape(X_test, (len(X_test), 1))
+ker = GPy.kern.RatQuad(input_dim = 1)
+m = GPy.models.GPRegression(X, Y, ker)
+m.optimize_restarts(num_restarts=3)
+m.plot()
+# X = [0, 30, 60 ... ]
+# X_test = [0, 10, 20, ...]
+Y_pred = m.predict(X_test)
+plt.figure(figsize=(14,3))
+plt.plot(X_test, Y_pred[0], '-ok', linewidth=0.8, markersize = 2.5)
+plt.show()
+
+np.savetxt("y_pred.csv", Y_pred, delimiter=",")
+
+Y = np.array([0])
+X = np.array([0])
+X_test = np.array([0])
+elec_usage_file_2 = "USA_CA_Long.Beach.722970_TMY2.csv"
+with open(elec_usage_file_2, 'r') as elec_usage_data:
+    elec_usage_reader = csv.reader(elec_usage_data, delimiter = ",")
+    header = next(elec_usage_reader)
+    count = 0
+    for line in elec_usage_reader:
+        Y = np.append(Y, float(line[1]))
+        X = np.append(X, X[-1] + 30)
+        for cnt in range(3):
+          X_test = np.append(X_test, X_test[-1]+10)
+        count += 1
+        if count > 8759:
+          break
+
+
+X = np.delete(X, 0)
+Y = np.delete(Y, 0)
+X = np.reshape(X, (len(X), 1))
+Y = np.reshape(Y, (len(Y), 1))
+X_test =np.delete(X_test,0)
+X_test = np.reshape(X_test, (len(X_test),1))
+#X_test = np.reshape(X_test, (len(X_test), 1))
+m_2 = GPy.models.GPRegression(X, Y, ker)
+m_2.optimize_restarts(num_restarts=3)
+m_2.plot()
+# X = [0, 30, 60 ... ]
+# X_test = [0, 10, 20, ...]
+Y_pred_2 = m.predict(X_test)
+plt.figure(figsize=(14,3))
+plt.plot(X_test, Y_pred_2[0], '-ok', linewidth=0.8, markersize = 2.5)
+plt.show()
+
+np.savetxt("y_pred_2.csv", Y_pred_2, delimiter=",")
+
+#np.save('model_save.npy', m.param_array)
+## step 2
+#m_load = GPy.models.GPRegression(X,Y,kernel=ker)
+#m_load.update_model(False)
+#m_load.initialize_parameter()
+#m_load[:] = np.load('model_save.npy')
+#m_load.update_model(True)
+#print(m_load)
+#m_load.plot()
+
+## Sci-kit
+#ker = GPy.kern.PeriodicExponential()
+###pred, sigma = m.predict(X_test, return_std = True)
+#m.plot()
+#plt.plot(X_test, y.pred)
+#scl = StandardScaler(with_std=True, with_mean=False)
+
+#x_sample = np.array([-1, 2, 3, 3.5, 7]).reshape(-1,1)
+#y_sample = scl.fit_transform(new_target(x_sample))
+
+class InputStateVariable(object):
+  fuzzy_set_list = []
+
+  def __init__(self, *args):
+    self.fuzzy_set_list = args
+
+  def get_fuzzy_sets(self):
+    return self.fuzzy_set_list
+
+class Trapeziums(object):
+    def __init__(self, left, left_top, right_top, right):
+        self.left = left
+        self.right = right
+        self.left_top = left_top
+        self.right_top = right_top
+
+    def membership_value(self, input_value):
+        if (input_value >= self.left_top) and (input_value <= self.right_top):
+            membership_value = 1.0
+        elif (input_value <= self.left) or (input_value >= self.right_top):
+            membership_value = 0.0
+        elif input_value < self.left_top:
+            membership_value = (input_value - self.left) / (self.left_top - self.left)
+        elif input_value > self.right_top:
+            membership_value = (input_value - self.right) / (self.right_top - self.right)
+        else:
+            membership_value = 0.0
+        return membership_value
+
+class Triangles(object):
+    def __init__(self, left, top, right):
+        self.left = left
+        self.right = right
+        self.top = top
+
+    def membership_value(self, input_value):
+        if input_value == self.top:
+            membership_value = 1.0
+        elif input_value <= self.left or input_value >= self.right:
+            membership_value = 0.0
+        elif input_value < self.top:
+            membership_value = (input_value - self.left) / (self.top - self.left)
+        elif input_value > self.top:
+            membership_value = (input_value - self.right) / (self.top - self.right)
+        return membership_value
+
+class Build(object):
+    list_of_input_variable = []
+
+    def __init__(self,*args):
+        self.list_of_input_variable = args
+
+    def get_input(self):
+        return self.list_of_input_variable
+
+    def get_number_of_rules(self):
+        number_of_rules = 1
+        for input_variable in self.list_of_input_variable:
+            number_of_rules = (number_of_rules * self.get_number_of_fuzzy_sets(input_variable))
+        return number_of_rules
+
+    def get_number_of_fuzzy_sets(self, input_variable):
+        return len(input_variable.get_fuzzy_sets())
+
+class Model(object):
+    L = []
+    R = []
+    R_= []
+    M = []
+    Q = 0
+    V = 0
+    Error = 0
+    q_table = np.matrix([])
+
+    def __init__(self, gamma, alpha, ee_rate, q_initial_value, action_set_length,
+                 fis = Build()):
+        self.gamma = gamma
+        self.alpha = alpha
+        self.ee_rate = ee_rate
+        self.q_initial_value = q_initial_value
+        self.action_set_length = action_set_length
+        self.fis = fis
+        if self.q_initial_value =='random':
+            self.q_table = np.random.random((self.fis.get_number_of_rules(), self.action_set_length))
+        if self.q_initial_value == 'zero':
+            self.q_table = np.zeros((self.fis.get_number_of_rules(), self.action_set_length))
+
+    def CalculateTruthValue(self,state_value):
+        self.R = []
+        self.L = []
+        input_variables = self.fis.list_of_input_variable
+        for index, variable in enumerate(input_variables):
+            X =[]
+            fuzzy_sets = variable.get_fuzzy_sets()
+            for set in fuzzy_sets:
+                membership_value = set.membership_value(state_value[index])
+                X.append(membership_value)
+            self.L.append(X)
+        for element in itertools.product(*self.L):
+            self.R.append(functools.reduce(operator.mul, element, 1))
+
+    def ActionSelection(self):
+        self.M = []
+        r = random.uniform(0, 1)
+        max = -sys.maxsize
+        for rull in self.q_table:
+            if r < self.ee_rate:
+                for index , action in enumerate(rull):
+                    if action > max:
+                        action_index = (index%21)
+                        action_index_2 = (int)(index/21)
+                        max = action
+            else:
+                action_index = random.randint(0, 20)
+                action_index_2 = random.randint(0, 20)
+            self.M.append((action_index, action_index_2))
+
+    def InferredAction(self):
+        max = -sys.maxsize
+        for index , truth_value in enumerate(self.R):
+            if truth_value > max:
+                max = truth_value
+                action = self.M[index]
+
+        return action
+
+    def CalculateQValue(self):
+        self.Q = 0
+        for index, truth_value in enumerate(self.R):
+            # array is one-dimensional?
+            self.Q = self.Q + truth_value * self.q_table[index,(self.M[index][0])+21*(self.M[index][1])]
+        self.Q = self.Q / sum(self.R)
+
+    def CalculateStateValue(self):
+        self.V = 0
+        max = -sys.maxsize
+        for index, rull in enumerate(self.q_table):
+            for action in rull:
+                if action < max:
+                    max = action
+            self.V = (self.R[index] * max) + self.V
+        if sum(self.R) == 0:
+            self.R[0] = 0.00001
+        self.V = self.V / sum(self.R)
+
+    def CalculateQualityVariation(self, reward):
+        self.Error = reward + ((self.gamma * self.V) - self.Q)
+
+    def UpdateqValue(self):
+        for index, truth_value in enumerate(self.R_):
+            delta_Q = self.alpha * (self.Error * truth_value)
+            self.q_table[index][self.M[index][0]+21*self.M[index][1]] = self.q_table[index][self.M[index][0]+21*self.M[index][1]] + delta_Q
+
+    def KeepStateHistory(self):
+        self.R_ = copy.copy(self.R)
+
+
+    def get_initial_action(self,state):
+        self.CalculateTruthValue(state)
+        self.ActionSelection()
+        action = self.InferredAction()
+        self.CalculateQValue()
+        self.KeepStateHistory()
+        return action
+
+    def run(self,state, reward):
+        self.CalculateTruthValue(state)
+        self.CalculateStateValue()
+        self.CalculateQualityVariation(reward)
+        self.UpdateqValue()
+        self.ActionSelection()
+        action = self.InferredAction()
+        self.CalculateQValue()
+        self.KeepStateHistory()
+        return action
+
+
+
+class Environment(object):
+    action_set = []
+    action_set_2 = []
+    state = [0,0,0]
+    solar_data = []
+    elec_usage = []
+    retail_price = []
+    e_m = 0
+    num_user = 0
+    t= 0
+
+    def __init__(self, s_d, e_u, r_p, e_u_2, num_u):
+        # s_1 = state of charge
+        # s_2 = retail price
+        # s_3 market price
+        #self.state = [0,0,0]
+        self.action_set = [-1,-0.9,-0.8,-0.7,-0.6,-0.5,-0.4,-0.3,-0.2,-0.1, 0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
+        # how do we buy or sell? add to action set?
+        self.action_set_2 = [-1,-0.9,-0.8,-0.7,-0.6,-0.5,-0.4,-0.3,-0.2,-0.1,0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
+        self.solar_data = s_d
+        self.elec_usage = e_u
+        #self.e_m = e_m
+        self.retail_price = r_p
+        self.t = 0;
+        self.charge_or_discharge_rate = 0
+        self.charging_efficiency = 0
+        self.u = 0
+        self.u_2 = 0
+        self.elec_usage_2 = e_u_2
+        self.num_user = num_u
+
+    def apply_action(self,action, t):
+        self.t = t
+        self.u = self.action_set[action[0]]
+        self.u_2 = self.action_set_2[action[1]]
+        prev_state = self.state
+        self.get_current_state((self.u,self.u_2), t)
+        reward = self.get_reward(prev_state)
+        return reward, self.state
+
+    def get_state_variable(self,variable_name):
+
+        if variable_name == 'battery_capacity':
+            return self.state[0]
+        elif variable_name == "retail_price":
+            return self.state[1]
+        elif variable_name == "market_price" :
+            return self.state[2]
+
+
+    def set_state_variable(self,variable_name,value):
+
+        if variable_name == 'battery_capacity':
+            self.state[0] = value
+        elif variable_name == "retail_price":
+            self.state[1] = value
+        elif variable_name == "market_price":
+            self.state[2] = value
+
+    # we never use u_2? so there's no trade action actually happening?
+    def get_current_state(self, selec_action, t):
+        self.u = selec_action[0]
+        self.u_2 = selec_action[1]
+        flag_sign = 1
+        if self.u * self.u_2 < 0:
+          flag_sign = -1
+
+
+        self.charge_or_discharge_rate = 5
+        # charging_efficiency from 0 - 1
+        charging_efficiency = 0.5
+        t_index = (int)(t / 30)
+        t_index_2 = (int)(t/10)
+        # Defining gamma, solar_E(t) is the solar data at time t, s_n(t) is the demanded electricity used by one user at time t
+        self.actual_efficiency = (charging_efficiency if self.u >= 0 else (1/charging_efficiency))
+        gamma = (self.e_m + self.solar_data[t_index] + flag_sign * self.u_2 * self.u * self.charge_or_discharge_rate * self.actual_efficiency * 0.5) / (self.elec_usage_2[t_index_2] * 0.5)
+        # Defining a(t) and b(t) for q(t, gamma(t))
+        a = 0.5
+        b = 0.5
+
+        #t = 0 , 30, 60, 90 ....
+        # Solar Energy  # Time
+        #     300 w     #  0 min
+        #     450 w     #  15 h
+        #         ..       30 h
+
+        # This If-Else is to set the upper-bound limit for the Tesla powerwall
+
+        self.set_state_variable('retail_price', self.retail_price[t_index])
+        self.set_state_variable('market_price', self.state[1] - (a*gamma**2 + b*gamma))
+
+
+        #if 0 <= self.get_state_variable('battery_capacity') + (self.u * self.charge_or_discharge_rate * self.actual_efficiency * 30) <= 40:
+        if 0 <= self.get_state_variable('battery_capacity') + (self.u * self.charge_or_discharge_rate * self.actual_efficiency * 0.5) and self.get_state_variable('battery_capacity') + (self.u * self.charge_or_discharge_rate * self.actual_efficiency * 0.5) <= 13.5:
+          self.set_state_variable('battery_capacity', self.get_state_variable('battery_capacity') + (self.u * self.charge_or_discharge_rate * self.actual_efficiency * 0.5))
+        elif self.get_state_variable('battery_capacity') + (self.u * self.charge_or_discharge_rate * self.actual_efficiency * 0.5) > 13.5:
+          self.set_state_variable('battery_capacity', 13.5)
+        else:
+          self.set_state_variable('battery_capacity', 0)
+        #elif self.get_state_variable('battery_capacity') + (self.u * self.charge_or_discharge_rate * self.actual_efficiency * 30) > 40:
+          #self.set_state_variable('battery_capacity', 40)
+        #else:
+         # self.set_state_variable('battery_capacity', 0)
+
+
+        self.e_m = self.e_m - (self.u * self.charge_or_discharge_rate * self.actual_efficiency * 0.5) - (self.elec_usage_2[t_index_2] * 0.5)
+        if self.e_m > self.num_user * 20:
+          self.e_m = self.num_user * 20
+        elif self.e_m < 0:
+          self.e_m = 0
+
+        # Tasks:
+        # 1. S + 2-nonSmart
+        # 2. 2S + 2-nonSmart
+        # 3users : 12kw (0.8, 1, 1) (0.4k, 0.8k, 1k)
+        # e_m : 1 kw / 2.2kw
+        # new e_m: 0 kw / 13.5 kw
+        # retail market: 13.5 kw
+        # Cost for agent: 1 * market_price + 0 * retail_price
+        # Cost for another smart user: 5/3 * market_price + ()
+
+
+    def get_reward(self, prev):
+        t_index = (int)(self.t / 30)
+        t_index_2 = (int)(self.t / 10)
+        p_n = self.u_2 * self.u * self.charge_or_discharge_rate * self.actual_efficiency * 0.5
+        p_b = self.u * self.charge_or_discharge_rate * self.actual_efficiency * 0.5
+        p_d = self.elec_usage[t_index_2] * 0.5
+        delta_p = p_d + p_b - p_n
+
+        zeta = prev[2] - self.state[2]
+        delta_zeta = self.get_state_variable('market_price') # community market price
+        theta = prev[1] - self.state[1]
+        delta_theta = self.get_state_variable('retail_price')
+        reward = (-1 * p_n * delta_zeta - delta_p * delta_theta)
+        if (reward < 0):
+          return 1 - 1/(1+math.exp(reward))
+        else:
+          return 1/(1+math.exp((-1)*reward))
+
+
+        # if (math.copysign(self.get_state_variable('x'),1) > 2.4) or (math.copysign(self.get_state_variable('tetha'),1) > 0.2094):
+        #     reward = -1
+        # else:
+
+        #     reward = 0
+        # return reward
+
+# Create FIS
+## This part is replacable!
+x1 = InputStateVariable(Trapeziums(-0.25, -2, -1, -0.5), Trapeziums(-1, -0.5, 0.5 , 1), Trapeziums(0.5, 1, 2, 2.4))
+x2 = InputStateVariable(Trapeziums(-0.25, -2, -1, -0.5), Trapeziums(-1, -0.5, 0.5 , 1), Trapeziums(0.5, 1, 2, 2.4))
+x3 = InputStateVariable(Trapeziums(-0.25, -2, -1, -0.5), Trapeziums(-1, -0.5, 0.5 , 1), Trapeziums(0.5, 1, 2, 2.4))
+fis = Build(x1,x2,x3)
+
+# Read data: Solar Energy(t), Electricity Usage(t), Retail price(t).
+
+# Reading in the solar energy data
+solar_data = []
+solar_file = "solar_energy_LA.csv"
+with open(solar_file, 'r') as solar_energy_data:
+    solar_energy_reader = csv.reader(solar_energy_data, delimiter = ",")
+    header = next(solar_energy_reader)
+    for line in solar_energy_reader:
+        solar_data.append(float(line[5]))
+        #solar_data.append(0.0)
+
+# Reading in the electricity usage data
+#elec_usage = []
+#total_elec_usage = []
+#elec_usage_file = "/content/drive/Shareddrives/ECE 209AS: Computational Robotics/Data_sets/energy_usage_LA.csv"
+#with open(elec_usage_file, 'r') as elec_usage_data:
+#    elec_usage_reader = csv.reader(elec_usage_data, delimiter = ",")
+#    header = next(elec_usage_reader)
+#    for line in elec_usage_reader:
+#        usage = 0
+#        for i in range(1,14):
+#            usage += float(line[i])
+#        total_elec_usage.append(usage)
+#        elec_usage.append(float(line[1]))
+
+
+#### Imported the second user, and updated the state dynamics in function get_current_state
+#elec_usage_2 = []
+#elec_usage_file_2 = "/content/drive/Shareddrives/ECE 209AS: Computational Robotics/Data_sets/USA_CA_Long.Beach.722970_TMY2.csv"
+#with open(elec_usage_file_2, 'r') as elec_usage_data:
+#    elec_usage_reader = csv.reader(elec_usage_data, delimiter = ",")
+#    header = next(elec_usage_reader)
+#    for line in elec_usage_reader:
+#        elec_usage_2.append(float(line[1]))
+
+
+# Reading in the retail price data
+retail_price_15min = []
+retail_price = [] # retail price every 30 min
+retail_price_file = "retail_price.csv"
+with open(retail_price_file, 'r') as retail_price_data:
+    retail_price_reader = csv.reader(retail_price_data, delimiter = ",")
+    header = next(retail_price_reader)
+
+    for line in retail_price_reader:
+        retail_price_15min.append(float(line[13]))
+
+    for i in range(len(retail_price_15min)):
+        if i % 2 == 0:
+            retail_price.append(float(retail_price_15min[i]))
+
+# second smart user // data USA_CA_Sacramento
+elec_usage_data_s2 = []
+elec_usage_file_2 = "USA_CA_Sacramento.724835_TMY2.csv"
+with open(elec_usage_file_2, 'r') as elec_usage_data:
+    elec_usage_reader = csv.reader(elec_usage_data, delimiter = ",")
+    header = next(elec_usage_reader)
+    for line in elec_usage_reader:
+        elec_usage_data_s2.append(float(line[1]))
+
+#
+elec_usage_data_ns2 = []
+elec_usage_file_2 = "USA_CA_Sacramento.724835_TMY2.csv"
+with open(elec_usage_file_2, 'r') as elec_usage_data:
+    elec_usage_reader = csv.reader(elec_usage_data, delimiter = ",")
+    header = next(elec_usage_reader)
+    for line in elec_usage_reader:
+        elec_usage_data_ns2.append(float(line[1]))
+
+
+
+#charge_energy_pool = 100KW
+
+# Create Model
+num_user = 2
+action_list = []
+action_2_list = []
+soc_list = []
+community_price = []
+local_energy = []
+sampled_retail_price = []
+sampled_elec_usage = []
+sampled_elec_usage_2 = []
+sampled_solar_energy = []
+sampled_differece_price = []
+reward_list = []
+total_reward =0
+
+t = 0
+model = Model(gamma = 0.9, alpha = 0.1 , ee_rate = 0.999, q_initial_value = 'random',
+                  action_set_length = 21*21, fis = fis)
+env = Environment(solar_data, Y_pred[0], retail_price, Y_pred_2, num_user)
+
+# elec_usage_2 has only 8760 values
+# 1 Year
+for iteration in range (0,8759*3):
+    t = t+10
+    if iteration % 200 == 0 or reward == -1:
+        env.__init__(solar_data, Y_pred[0], retail_price, Y_pred_2[0], num_user)
+        action = model.get_initial_action(env.state)
+        reward, state_value = env.apply_action(action, t)
+    action = model.run(state_value, reward)
+    reward, state_value = env.apply_action(action, t)
+
+    t_index = (int)(t/10)
+    if reward != -1:
+        action_list.append(action[0])
+        action_2_list.append(action[1])
+        soc_list.append((state_value[0]/13.5))
+        community_price.append(state_value[2])
+        local_energy.append(env.e_m)
+        sampled_retail_price.append(state_value[1])
+        sampled_elec_usage.append(env.elec_usage[t_index])
+        sampled_elec_usage_2.append(env.elec_usage_2[t_index])
+        sampled_solar_energy.append(env.solar_data[t_index])
+        sampled_differece_price.append(state_value[1]-state_value[2])
+        total_reward += reward
+        reward_list.append(total_reward)
+
+plt.figure(figsize=(14,3))
+plt.plot(reward_list, '-or', linewidth=0.8, markersize = 2.5)
+plt.ylabel('Accumulated rewards')
+plt.show()
+
+plt.figure(figsize=(14,3))
+plt.plot(action_list, '-ob', linewidth=0.8, markersize = 2.5)
+plt.ylabel('charging action')
+plt.show()
+
+plt.figure(figsize=(14,3))
+plt.plot(action_2_list , '-ok', linewidth=0.8, markersize = 2.5)
+plt.ylabel('trading action')
+plt.show()
+
+
+plt.figure(figsize=(14,3))
+plt.plot(soc_list, '-or', linewidth=0.8, markersize = 2.5)
+plt.ylabel('state of charge')
+ymin, ymax = plt.ylim()
+plt.ylim(ymin*0, ymax*2)
+plt.show()
+
+plt.figure(figsize=(14,3))
+plt.plot(sampled_elec_usage, '-og', linewidth=0.8, markersize = 2.5)
+plt.ylabel('elec_usage_user1')
+plt.show()
+
+plt.figure(figsize=(14,3))
+plt.plot(sampled_elec_usage_2, '-oc', linewidth=0.8, markersize = 2.5)
+plt.ylabel('elec_usage_user2')
+plt.show()
+# 100 * 24h
+
+plt.figure(figsize=(14,3))
+plt.plot(sampled_retail_price, '-og', linewidth=0.8, markersize = 2.5)
+plt.ylabel('retail_price')
+plt.show()
+
+plt.figure(figsize=(14,3))
+plt.plot(community_price, '-oc', linewidth=0.8, markersize = 2.5)
+plt.ylabel('community_market_price')
+plt.show()
+
+plt.figure(figsize=(14,3))
+plt.plot(sampled_differece_price, '-og', linewidth=0.8, markersize = 2.5)
+plt.ylabel('Difference')
+plt.show()
+# local_energy_pool & solar
+plt.figure(figsize=(14,3))
+plt.plot(local_energy, '-og', linewidth=0.8, markersize = 2.5)
+plt.ylabel('local energy pool')
+plt.show()
+
+plt.figure(figsize=(14,3))
+plt.plot(sampled_solar_energy, '-oc', linewidth=0.8, markersize = 2.5)
+plt.ylabel('solar energy')
+plt.show()
+
+# Testing:
+# 1. Larger data sets. (1 more smart user, 1 more non-intelligent user)
+# 1. Try to compute and plot the cost function for our agent.
+
+# Algorithm:
+# 1. Consider different trading records. (Coding)
+# 2. Change the local ess to not make transactions that it cannot fulfill
+
+# Improvements:
+# 1. GPR on our data
+# 2. Make our action set slightly more continuous
+# 3. Consider deep Q learning and provide vision on future work
+# 4. To be determined
